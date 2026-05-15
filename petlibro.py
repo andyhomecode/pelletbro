@@ -68,33 +68,47 @@ class PetlibroClient:
             await self._login()
         return self._token
 
+    def _invalidate_token(self):
+        self._token = None
+        self._token_expiry = 0
+
     async def list_devices(self) -> list:
-        token = await self._get_token()
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{BASE_URL}/device/device/list",
-                json={},
-                headers=_headers(token),
-                timeout=15,
-            )
-        data = _check(resp.json())
-        return data.get("data") or []
+        for attempt in range(2):
+            token = await self._get_token()
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{BASE_URL}/device/device/list",
+                    json={},
+                    headers=_headers(token),
+                    timeout=15,
+                )
+            data = resp.json()
+            if data.get("code") == 1009 and attempt == 0:
+                self._invalidate_token()
+                continue
+            return _check(data).get("data") or []
 
     async def feed(self, device_sn: str, portions: int = 1) -> None:
-        token = await self._get_token()
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{BASE_URL}/device/device/manualFeeding",
-                json={
-                    "deviceSn": device_sn,
-                    "grainNum": portions,
-                    "requestId": uuid.uuid4().hex,
-                },
-                headers=_headers(token),
-                timeout=20,
-            )
-        # some firmware returns bare 0 instead of a JSON object
-        raw = resp.text.strip()
-        if raw == "0":
+        for attempt in range(2):
+            token = await self._get_token()
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{BASE_URL}/device/device/manualFeeding",
+                    json={
+                        "deviceSn": device_sn,
+                        "grainNum": portions,
+                        "requestId": uuid.uuid4().hex,
+                    },
+                    headers=_headers(token),
+                    timeout=20,
+                )
+            # some firmware returns bare 0 instead of a JSON object
+            raw = resp.text.strip()
+            if raw == "0":
+                return
+            data = resp.json()
+            if data.get("code") == 1009 and attempt == 0:
+                self._invalidate_token()
+                continue
+            _check(data)
             return
-        _check(resp.json())

@@ -39,15 +39,21 @@ def require_api_key(
 
 
 @app.get("/feed", dependencies=[Depends(require_api_key)])
-async def feed(portions: int = Query(default=1, ge=1, le=10), device_sn: Optional[str] = Query(default=None)):
+async def feed(portions: Optional[str] = Query(default=None), device_sn: Optional[str] = Query(default=None)):
+    try:
+        n = int(portions) if portions else 1
+    except ValueError:
+        raise HTTPException(status_code=422, detail="portions must be a valid integer")
+    if not 1 <= n <= 10:
+        raise HTTPException(status_code=422, detail="portions must be between 1 and 10")
     sn = device_sn or PETLIBRO_DEVICE_SN
     if not sn:
         raise HTTPException(status_code=400, detail="No device_sn provided and PETLIBRO_DEVICE_SN not set")
     try:
-        await client.feed(sn, portions)
+        await client.feed(sn, n)
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    return {"ok": True, "device_sn": sn, "portions": portions}
+    return {"ok": True, "device_sn": sn, "portions": n}
 
 
 @app.get("/devices", dependencies=[Depends(require_api_key)])
