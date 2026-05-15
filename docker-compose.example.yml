@@ -1,0 +1,15 @@
+services:
+  pelletbro:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8077:8077"
+    env_file: .env
+
+    # Optional: attach to a shared proxy network (e.g. Caddy, Traefik)
+    # networks:
+    #   - proxy-net
+
+# networks:
+#   proxy-net:
+#     external: true
