@@ -162,3 +162,7 @@ The Petlibro API used here was reverse-engineered by the open source community:
 - [Corti.com write-up](https://corti.com/bringing-petlibro-smart-feeders-to-apple-home-building-a-homebridge-plugin/) — API reverse engineering walkthrough
 
 This project is not affiliated with or endorsed by Petlibro.
+
+## License
+
+[MIT](LICENSE)
