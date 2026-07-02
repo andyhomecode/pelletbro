@@ -64,6 +64,8 @@ All configuration is via environment variables (`.env` file).
 
 ## API
 
+Every response — success or error — includes a plain-English `message` field, so a client (like an iPhone Shortcut) can always read the same key regardless of outcome. On `/feed` failures caused by the feeder itself (offline, out of food, door error, etc.), `message` explains what's wrong rather than just relaying Petlibro's raw error code.
+
 ### `GET /feed`
 
 Triggers a manual feeding.
@@ -90,6 +92,22 @@ Lists all devices associated with your Petlibro account. Useful for finding your
 
 ```bash
 curl http://localhost:8077/devices
+```
+
+### `GET /status`
+
+Plain-English health check for a feeder — handy for showing a result on an iPhone (Siri Shortcuts, notifications) without parsing raw Petlibro error codes.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `device_sn` | string | env var | Override the default device serial number |
+
+```bash
+curl "http://localhost:8077/status?api_key=your-api-key"
+```
+
+```json
+{"device_sn": "AF01...", "online": false, "message": "second breakfast machine is offline — ..."}
 ```
 
 ### `GET /health`
@@ -130,9 +148,11 @@ Tap **+** below the URL action, search for **Get Contents of URL**, and select i
 Tap the blue **Get Contents of** text to expand options and confirm:
 - Method: **GET**
 
-**4. (Optional) Add a confirmation notification**
+**4. (Optional) Show the actual result**
 
-Tap **+**, search for **Show Notification**, and enter something like `Fed!`. This gives you confirmation that it worked, useful on Apple Watch.
+Every response includes a plain-English `message` field — showing it means you'll see *why* a feeding failed (feeder offline, out of food, etc.) instead of just "it didn't work."
+
+Tap **+**, search for **Get Dictionary Value**, select it, and set the key to `message`. Then tap **+** again, search for **Show Notification**, and use the dictionary value as the notification text.
 
 **5. Name and save**
 

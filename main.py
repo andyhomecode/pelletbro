@@ -3,10 +3,11 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Security
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from petlibro import PetlibroClient
+from petlibro import PetlibroClient, describe_device_status
 
 PETLIBRO_EMAIL = os.environ["PETLIBRO_EMAIL"]
 PETLIBRO_PASSWORD = os.environ["PETLIBRO_PASSWORD"]
@@ -25,6 +26,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Pelletbro", lifespan=lifespan, docs_url=None, redoc_url=None)
 bearer = HTTPBearer(auto_error=False)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    # Always expose a plain "message" field so clients (e.g. an iPhone Shortcut)
+    # can read one key regardless of success or failure.
+    return JSONResponse(status_code=exc.status_code, content={"message": exc.detail})
 
 
 def require_api_key(
@@ -52,8 +60,15 @@ async def feed(portions: Optional[str] = Query(default=None), device_sn: Optiona
     try:
         await client.feed(sn, n)
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    return {"ok": True, "device_sn": sn, "portions": n}
+        detail = str(e)
+        try:
+            device = await client.get_device(sn)
+        except RuntimeError:
+            device = None
+        if device is not None:
+            detail = f"{describe_device_status(device)} (Petlibro said: {e})"
+        raise HTTPException(status_code=502, detail=detail)
+    return {"ok": True, "device_sn": sn, "portions": n, "message": f"Fed {n} portion(s)."}
 
 
 @app.get("/devices", dependencies=[Depends(require_api_key)])
@@ -62,6 +77,24 @@ async def devices():
         return await client.list_devices()
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/status", dependencies=[Depends(require_api_key)])
+async def status(device_sn: Optional[str] = Query(default=None)):
+    sn = device_sn or PETLIBRO_DEVICE_SN
+    if not sn:
+        raise HTTPException(status_code=400, detail="No device_sn provided and PETLIBRO_DEVICE_SN not set")
+    try:
+        device = await client.get_device(sn)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    if device is None:
+        raise HTTPException(status_code=404, detail=f"No feeder found with device_sn {sn}")
+    return {
+        "device_sn": sn,
+        "online": bool(device.get("online")),
+        "message": describe_device_status(device),
+    }
 
 
 @app.get("/health")

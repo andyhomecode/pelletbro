@@ -29,6 +29,37 @@ def _check(data: dict) -> dict:
     return data
 
 
+def describe_device_status(device: dict) -> str:
+    """Turn a raw device record into a plain-English summary."""
+    name = device.get("name") or "The feeder"
+    notes = []
+
+    if device.get("online") is False:
+        notes.append(
+            f"{name} is offline — it isn't currently connected to Petlibro's cloud, "
+            "even if it still responds to physical button presses. Try power-cycling "
+            "it or checking its WiFi connection."
+        )
+    if device.get("errorState") or device.get("barnDoorError") or device.get("doorErrorState") not in (None, "NORMAL"):
+        notes.append(f"{name} is reporting a hardware or door error.")
+    if device.get("surplusGrain") is False:
+        notes.append(f"{name} is out of food — refill the hopper.")
+    if device.get("deviceStoppedWorking"):
+        notes.append(f"{name} has stopped working.")
+    exception_message = device.get("exceptionMessage")
+    if exception_message:
+        notes.append(f"Device reported: {exception_message}")
+    if device.get("batteryState") == "low":
+        notes.append(
+            "Its backup battery is low — separate from AC power, shouldn't affect "
+            "operation while plugged in, but worth replacing if you rely on it during outages."
+        )
+
+    if not notes:
+        return f"{name} looks online and healthy."
+    return " ".join(notes)
+
+
 class PetlibroClient:
     def __init__(self, email: str, password: str):
         self._email = email
@@ -87,6 +118,12 @@ class PetlibroClient:
                 self._invalidate_token()
                 continue
             return _check(data).get("data") or []
+
+    async def get_device(self, device_sn: str) -> Optional[dict]:
+        for device in await self.list_devices():
+            if device.get("deviceSn") == device_sn:
+                return device
+        return None
 
     async def feed(self, device_sn: str, portions: int = 1) -> None:
         for attempt in range(2):
